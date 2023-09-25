@@ -25,7 +25,8 @@
  * Function Declarations *
 *************************/
 BOOL PrivilegesPresent();
-int validateCmdlineArgs(int argc, char **argv);
+int ValidateCmdlineArgs(int argc, char **argv);
+void PrintUsage();
 
 /********************
  * Helper Functions *
@@ -119,7 +120,15 @@ CleanupDebug:
     return debugPrivilegePresent && tcbPrivilegePresent && assignPrimaryTokenPrivilegePresent;
 }
 
-int validateCmdlineArgs(int argc, char **argv) {
+void PrintUsage() {
+/**
+ * Purpose: Displays how to use the binary to stdout
+ * @return: void - nothing
+*/
+    printf("Usage: accesstoken.exe <PID>\nWhere <PID> represents the PID of the process with the access token you want to use\n");
+}
+
+int ValidateCmdlineArgs(int argc, char **argv) {
 /**
  * Purpose: Determines if the binary was called correctly, displays usage if not,
  *          and converts the first parameter to a DWORD
@@ -130,7 +139,7 @@ int validateCmdlineArgs(int argc, char **argv) {
 
     // Make sure the number of arguments is correct
     if (argc != 2) {
-        printf("Usage: accesstoken.exe <PID>\nWhere <PID> represents the PID of the process with the access token you want to use\n");
+        PrintUsage();
         return -1;
     }
 
@@ -140,12 +149,14 @@ int validateCmdlineArgs(int argc, char **argv) {
     int targetProcId = (int)strtoul(argv[1], &endptr, 10);
     if (errno != 0) {
         perror("[-] Error converting PID to int");
+        PrintUsage();
         return -1;
     }
 
     // Bounds check
     if (targetProcId < 1) {
         printf("[-] Error: PID must be larger than 0\n");
+        PrintUsage();
         return -1;
     }
 
@@ -161,7 +172,7 @@ int main(int argc, char **argv) {
     wchar_t *pathToCmd = NULL;  // Full quoted path to cmd.exe
 
     // Validate the command line arguments
-    targetProcId = (DWORD)validateCmdlineArgs(argc, argv);
+    targetProcId = (DWORD)ValidateCmdlineArgs(argc, argv);
     if (targetProcId == -1) exit(1);
 
     // Debug privileges (SeDebugPrivilge) are required to open a process owned
@@ -170,7 +181,7 @@ int main(int argc, char **argv) {
     // SE_TCB_NAME and SE_ASSIGNPRIMARYTOKEN_NAME are required to launch a process as another user using an access token
     // https://learn.microsoft.com/en-us/windows/win32/secauthz/access-rights-for-access-token-objects
     if (!PrivilegesPresent()) {
-        printf("[-] Error: The correct privileges are not assigned to the current user. These are prerequisites to creating a process as another user");
+        printf("[-] Error: The correct privileges are not assigned to the current user. These are prerequisites to creating a process as another user. Try running as SYSTEM\n");
         goto CleanupMain;
     }
 
