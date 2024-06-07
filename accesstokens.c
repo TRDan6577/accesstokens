@@ -2,6 +2,7 @@
  * Purpose: This was made for educational purposes as a refresher on C programming and Windows
  *          programming. It also serves as an introduction to Windows access tokens
  * Author:  Tom Daniels <github.com/trdan6577>
+ * License: MPLv2. See https://github.com/TRDan6577/accesstokens and the license file for more details
 */
 
 /****************
